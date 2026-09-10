@@ -1,0 +1,86 @@
+{
+  "annotations": { "list": [] },
+  "editable": true,
+  "fiscalYearStartMonth": 0,
+  "graphTooltip": 0,
+  "id": null,
+  "links": [],
+  "panels": [
+    {
+      "type": "text",
+      "title": "How to read this lab",
+      "gridPos": { "h": 6, "w": 24, "x": 0, "y": 0 },
+      "options": {
+        "mode": "markdown",
+        "content": "# Quality Observability Lab\nRun `npm run demo:stack`, then correlate the Playwright evidence with backend telemetry.\n\n**Healthy path:** HTTP 200 / business PASS  \n**Injected path:** HTTP 500 / deliberate business FAIL\n\nUse the same `trace_id` to move from the browser evidence to Tempo and Loki. Metrics deliberately avoid `test_run_id` labels to prevent high-cardinality series."
+      }
+    },
+    {
+      "type": "stat",
+      "title": "Checkout requests observed",
+      "datasource": { "type": "prometheus", "uid": "prometheus" },
+      "gridPos": { "h": 7, "w": 8, "x": 0, "y": 6 },
+      "targets": [
+        {
+          "expr": "sum(lab_http_requests_total)",
+          "refId": "A",
+          "legendFormat": "requests"
+        }
+      ],
+      "options": {
+        "reduceOptions": { "values": false, "calcs": ["lastNotNull"], "fields": "" },
+        "orientation": "auto",
+        "textMode": "auto",
+        "colorMode": "value",
+        "graphMode": "area",
+        "justifyMode": "auto"
+      }
+    },
+    {
+      "type": "logs",
+      "title": "Correlated application logs",
+      "datasource": { "type": "loki", "uid": "loki" },
+      "gridPos": { "h": 10, "w": 16, "x": 8, "y": 6 },
+      "targets": [
+        {
+          "expr": "{service_name=\"synthetic-checkout\"}",
+          "refId": "A"
+        }
+      ],
+      "options": {
+        "showTime": true,
+        "showLabels": true,
+        "wrapLogMessage": true,
+        "enableLogDetails": true,
+        "sortOrder": "Descending"
+      }
+    },
+    {
+      "type": "table",
+      "title": "Checkout traces",
+      "datasource": { "type": "tempo", "uid": "tempo" },
+      "gridPos": { "h": 10, "w": 24, "x": 0, "y": 16 },
+      "targets": [
+        {
+          "query": "{ resource.service.name = \"synthetic-checkout\" }",
+          "queryType": "traceql",
+          "refId": "A",
+          "limit": 20,
+          "tableType": "traces"
+        }
+      ],
+      "options": { "showHeader": true, "cellHeight": "sm" }
+    }
+  ],
+  "refresh": "5s",
+  "schemaVersion": 41,
+  "tags": ["quality-engineering", "opentelemetry", "playwright", "observability"],
+  "templating": { "list": [] },
+  "time": { "from": "now-15m", "to": "now" },
+  "timepicker": {},
+  "timezone": "browser",
+  "title": "Quality Observability Lab",
+  "uid": "quality-observability-lab",
+  "version": 1,
+  "weekStart": ""
+}

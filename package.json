@@ -1,12 +1,16 @@
 {
   "name": "quality-observability-lab",
-  "version": "0.1.0",
+  "version": "0.2.0",
   "description": "Learning lab correlating Playwright execution with OpenTelemetry traces, logs, metrics and failure evidence",
   "scripts": {
     "start": "node src/server.js",
     "check": "node scripts/check.js",
     "test:unit": "node --test tests/unit/*.test.js",
     "demo": "node scripts/run-lab.js",
+    "demo:stack": "node scripts/wait-stack.js && node scripts/run-lab.js --otel && node scripts/verify-stack.js",
+    "stack:up": "docker compose up -d",
+    "stack:down": "docker compose down -v --remove-orphans",
+    "stack:logs": "docker compose logs -f lgtm",
     "test": "npm run check && npm run test:unit && npm run demo",
     "report": "playwright show-report"
   },
@@ -14,7 +18,16 @@
     "type": "git",
     "url": "git+https://github.com/javicale/quality-observability-lab.git"
   },
-  "keywords": [],
+  "keywords": [
+    "quality-engineering",
+    "opentelemetry",
+    "playwright",
+    "observability",
+    "grafana",
+    "tempo",
+    "loki",
+    "prometheus"
+  ],
   "author": "Javier Capa",
   "license": "ISC",
   "type": "module",
@@ -26,6 +39,9 @@
     "@opentelemetry/api": "1.9.1",
     "@opentelemetry/api-logs": "0.222.0",
     "@opentelemetry/core": "2.11.0",
+    "@opentelemetry/exporter-logs-otlp-http": "0.222.0",
+    "@opentelemetry/exporter-metrics-otlp-http": "0.222.0",
+    "@opentelemetry/exporter-trace-otlp-http": "0.222.0",
     "@opentelemetry/resources": "2.11.0",
     "@opentelemetry/sdk-logs": "0.222.0",
     "@opentelemetry/sdk-metrics": "2.11.0",

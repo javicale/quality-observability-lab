@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: Quality Observability Lab
+    folder: Quality Observability Lab
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 10
+    options:
+      path: /otel-lgtm/grafana/conf/provisioning/dashboards/custom
+      foldersFromFilesStructure: false
