@@ -86,7 +86,9 @@ const logProcessors = [
     })),
   }),
 ];
-if (otlpEnabled) logProcessors.push(new SimpleLogRecordProcessor(new OTLPLogExporter()));
+if (otlpEnabled) {
+  logProcessors.push(new SimpleLogRecordProcessor({ exporter: new OTLPLogExporter() }));
+}
 const logs = new LoggerProvider({ resource, processors: logProcessors });
 
 export const tracer = traces.getTracer('quality-lab');
