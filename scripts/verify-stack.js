@@ -46,30 +46,61 @@ for (const c of cases) {
   tempo[c.scenario] = c.trace_id;
 }
 
+function flattenLoki(body) {
+  return (body.data?.result || []).flatMap(stream =>
+    (stream.values || []).map(value => ({
+      timestamp: value[0],
+      line: value[1],
+      metadata: { ...(stream.stream || {}), ...(value[2] || {}) },
+    }))
+  );
+}
+
 const loki = {};
+const nowNs = BigInt(Date.now()) * 1000000n;
+const startNs = nowNs - 15n * 60n * 1000000000n;
+const endNs = nowNs + 60n * 1000000000n;
+const broadParams = new URLSearchParams({
+  query: '{service_name=~".+"}',
+  limit: '200',
+  start: startNs.toString(),
+  end: endNs.toString(),
+  direction: 'backward',
+});
+
 for (const c of cases) {
-  const query = `{service_name="synthetic-checkout"} | trace_id = "${c.trace_id}"`;
-  const nowNs = BigInt(Date.now()) * 1000000n;
-  const startNs = nowNs - 15n * 60n * 1000000000n;
-  const endNs = nowNs + 60n * 1000000000n;
-  const params = new URLSearchParams({ query, limit: '50', start: startNs.toString(), end: endNs.toString() });
-  const result = await poll(`Loki log ${c.scenario}`, async () => {
-    const body = await json(`http://127.0.0.1:3100/loki/api/v1/query_range?${params}`);
-    const count = (body.data?.result || []).reduce((sum, stream) => sum + (stream.values?.length || 0), 0);
-    return count > 0 ? { count } : null;
+  const expectedBody = c.scenario === 'error' ? 'checkout.failed' : 'checkout.completed';
+  const result = await poll(`Loki correlated log ${c.scenario}`, async () => {
+    const body = await json(`http://127.0.0.1:3100/loki/api/v1/query_range?${broadParams}`);
+    const entries = flattenLoki(body);
+    const match = entries.find(entry =>
+      entry.line === expectedBody &&
+      entry.metadata.trace_id === c.trace_id &&
+      entry.metadata.service_name === 'synthetic-checkout'
+    );
+    if (!match) return null;
+    return {
+      trace_id: c.trace_id,
+      service_name: match.metadata.service_name,
+      test_run_id: match.metadata.test_run_id,
+      log_body: match.line,
+    };
   });
-  loki[c.scenario] = { trace_id: c.trace_id, entries: result.count };
+  assert.equal(result.test_run_id, c.test_run_id, `Loki lost test_run_id for ${c.scenario}`);
+  loki[c.scenario] = result;
 }
 
 const prometheus = await poll('Prometheus metrics', async () => {
-  const queries = ['{service_name="synthetic-checkout"}', 'lab_http_requests_total'];
-  for (const query of queries) {
+  const candidates = [
+    'lab_http_requests_total',
+    '{__name__=~"lab_http_requests.*"}',
+  ];
+  for (const query of candidates) {
     const body = await json(`http://127.0.0.1:9090/api/v1/query?query=${encodeURIComponent(query)}`);
     const result = body.data?.result || [];
-    if (result.length) {
-      const names = [...new Set(result.map(item => item.metric?.__name__).filter(Boolean))];
-      if (names.some(name => name.includes('lab_http_requests'))) return { query, names };
-    }
+    if (!result.length) continue;
+    const names = [...new Set(result.map(item => item.metric?.__name__).filter(Boolean))];
+    if (names.some(name => name.includes('lab_http_requests'))) return { query, names };
   }
   return null;
 });
@@ -82,7 +113,7 @@ const verification = {
   tempo: { status: 'PASS', traces: tempo },
   loki: { status: 'PASS', logs: loki },
   prometheus: { status: 'PASS', metric_names: prometheus.names },
-  statement: 'OTLP telemetry from the synthetic checkout was ingested by the local LGTM stack and is queryable from its backends.',
+  statement: 'OTLP telemetry from the synthetic checkout was ingested by the local LGTM stack and is queryable from Grafana, Tempo, Loki and Prometheus.',
 };
 writeFileSync(`${directory}/stack-verification.json`, JSON.stringify(verification, null, 2));
 console.log(verification);
