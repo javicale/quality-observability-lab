@@ -4,20 +4,25 @@
 
 **From “the test failed” to evidence explaining where and why.**
 
-A local, synthetic **R&D / learning lab** connecting Playwright browser tests with OpenTelemetry backend traces, correlated logs, metrics and failure evidence. This is a portfolio experiment, not a production-ready observability platform or release approval system.
+A local, synthetic **R&D / learning lab** that connects Playwright browser tests with OpenTelemetry traces, correlated logs, metrics, deterministic evidence, OTLP ingestion and a local Grafana LGTM stack. It is a portfolio experiment, not a production observability platform and not a release approval system.
 
 ## What it demonstrates
 
 - A browser checkout with a healthy path and an intentionally injected inventory error (HTTP 500).
-- A unique `test_run_id` per scenario and W3C `traceparent` sent from the browser to the backend.
-- Real OpenTelemetry SDK server/child spans, an exception event, correlated log records, a request counter and duration histogram.
-- JSON/JSONL evidence, browser screenshots, video, Playwright trace and HTML report.
-- A deterministic quality gate that rejects broken correlation or missing signals; negative tests prove the gate can fail.
-- GitHub Actions on push and pull request, without repository secrets or external services.
+- A unique `test_run_id` per scenario and W3C `traceparent` propagated from the browser to the backend.
+- Real OpenTelemetry server/child spans, exception events, correlated log records, a request counter and a duration histogram.
+- Dual telemetry paths: inspectable local JSON/JSONL evidence and OTLP/HTTP export.
+- A local `grafana/otel-lgtm` stack exposing Grafana, Tempo, Loki and Prometheus on loopback only.
+- Programmatic stack verification proving that the expected traces, correlated logs, metrics and Grafana dashboard are queryable.
+- Playwright screenshot, video, trace and HTML report evidence.
+- A deterministic evidence gate with negative tests that fail closed when relationships or signals are missing.
+- GitHub Actions validating both the deterministic evidence contract and the real local OTLP/LGTM contract without repository secrets or external SaaS accounts.
 
 ## Run locally
 
-Prerequisite: Node.js 24 LTS and npm. Windows PowerShell, Linux and macOS use the same commands.
+Prerequisites: Node.js 24 LTS and npm. For the visual stack experiment, Docker with Compose is also required.
+
+### Deterministic evidence mode
 
 ```sh
 git clone https://github.com/javicale/quality-observability-lab.git
@@ -28,7 +33,17 @@ npm test
 npm run report
 ```
 
-On Linux, install browser system packages with `npx playwright install --with-deps chromium` when needed. `npm test` checks JavaScript syntax, runs gate unit tests, starts a fresh local app, runs both browser scenarios and validates the telemetry evidence. Port 3000 must be available. No Docker, account, API key or cloud telemetry service is required.
+On Linux, install browser system packages with `npx playwright install --with-deps chromium` when needed. `npm test` checks JavaScript syntax, runs gate unit tests, starts a fresh local app, runs both browser scenarios and validates the file-based telemetry evidence. Port 3000 must be available.
+
+### OTLP + Grafana LGTM mode
+
+```sh
+npm run stack:up
+npm run demo:stack
+npm run stack:down
+```
+
+`demo:stack` waits for the local stack, runs the same synthetic checkout with `file+otlp` telemetry, then verifies Grafana, Tempo, Loki and Prometheus through their local APIs. The compose ports are bound to `127.0.0.1` only. Grafana is available at `http://127.0.0.1:3001` while the stack is running.
 
 ## Understanding green CI with a deliberate failure
 
@@ -39,7 +54,7 @@ On Linux, install browser system packages with `npx playwright install --with-de
 
 The failing scenario is narrowly marked as an expected Playwright failure **after** setup and correlation assertions. CI is green only when both outcomes are observed and the evidence gate passes. There are no retries, skipped tests or `continue-on-error`. A missing 500, broken healthy checkout or missing telemetry fails the experiment.
 
-To see the same failure as a normal red test (intentional nonzero exit):
+To see the same failure as a normal red test:
 
 ```sh
 node scripts/run-lab.js --raw-failure
@@ -53,17 +68,18 @@ The business failure remains `FAIL` in the evidence even when the experiment gat
 
 ```text
 artifacts/<execution-id>/
-  success.json          # browser outcome, run ID, trace ID, screenshot path
-  error.json            # deliberate business FAIL + response
-  traces.jsonl          # exported OTel server/child spans and exception
-  logs.jsonl            # OTel log records with traceId + spanId + test.run_id
-  metrics.jsonl         # cumulative request counter and duration histogram
-  quality-gate.json     # deterministic experiment verdict
-playwright-report/      # HTML report and attachments
-test-results/           # browser traces, screenshots and videos
+  success.json              # browser outcome, run ID, trace ID, screenshot path
+  error.json                # deliberate business FAIL + response
+  traces.jsonl              # exported OTel server/child spans and exception
+  logs.jsonl                # OTel logs with traceId + spanId + test.run_id
+  metrics.jsonl             # cumulative request counter and duration histogram
+  quality-gate.json         # deterministic experiment verdict
+  stack-verification.json   # present in stack mode; verified backend ingestion/query results
+playwright-report/          # HTML report and attachments
+test-results/               # browser traces, screenshots and videos
 ```
 
-CI uploads these directories as `quality-observability-evidence` for 14 days, including on failure. Generated evidence is excluded from Git. Absolute screenshot paths describe the original runner; downloaded artifacts retain the `test-results/` files for local inspection.
+GitHub Actions uploads file-mode evidence as `quality-observability-evidence` and stack-mode evidence as `quality-observability-stack-evidence`, each retained for 14 days.
 
 ## Architecture
 
@@ -73,31 +89,46 @@ flowchart LR
   A --> S[Server span → inventory child span]
   A --> L[Correlated OTel logs]
   A --> M[OTel counter + histogram]
-  S --> E[Local JSONL exporters]
+  S --> E[Local JSONL evidence]
   L --> E
   M --> E
+  S --> O[OTLP/HTTP]
+  L --> O
+  M --> O
+  O --> C[OpenTelemetry Collector]
+  C --> T[Tempo]
+  C --> K[Loki]
+  C --> R[Prometheus]
+  T --> G[Grafana]
+  K --> G
+  R --> G
   P --> B[Browser evidence]
-  E --> G[Evidence quality gate]
-  B --> G
-  G --> C[GitHub Actions artifact]
+  E --> Q[Deterministic evidence gate]
+  B --> Q
+  T --> V[Stack verification]
+  K --> V
+  R --> V
+  G --> V
 ```
 
-The file exporters intentionally make the telemetry inspectable without a collector. They export from actual SDK records; they are not an OTLP collector, Jaeger or Grafana deployment. Metric correlation is at scenario/status level; run/trace correlation is exact for spans, logs and browser evidence.
+File-based evidence remains the deterministic, directly inspectable contract. Stack mode adds an independent integration contract proving that the same application telemetry is accepted over OTLP and queryable from the local observability backends. Metric correlation is intentionally bounded at scenario/status level; run/trace correlation is exact for spans, logs and browser evidence.
 
 ## Documentation
 
 - [Architecture and decisions](docs/ARCHITECTURE.md)
 - [Signals, correlation and evidence contract](docs/OBSERVABILITY.md)
 - [Five-minute demo and troubleshooting](docs/DEMO.md)
-- [Learning guide, findings and roadmap](docs/LEARNING.md)
+- [Learning guide and findings](docs/LEARNING.md)
+- [Final verified results](docs/RESULTS.md)
+- [Phase 2 stack design](docs/PHASE2-STACK.md)
 - [Security and scope](SECURITY.md)
 
 ## Portfolio context
 
-This lab extends the evidence and CI themes in [Playwright Quality Engineering](https://github.com/javicale/playwright-quality-engineering), complements [Quality Engineering Playbook](https://github.com/javicale/quality-engineering-playbook), and keeps the explicit experimental boundaries of [Agentic Quality Engineering](https://github.com/javicale/agentic-quality-engineering). It focuses on deterministic failure diagnosis; no AI agent is needed for this experiment.
+This lab extends the evidence and CI themes in [Playwright Quality Engineering](https://github.com/javicale/playwright-quality-engineering), complements [Quality Engineering Playbook](https://github.com/javicale/quality-engineering-playbook), and keeps the explicit experimental boundaries of [Agentic Quality Engineering](https://github.com/javicale/agentic-quality-engineering). Its focus is deterministic failure diagnosis and telemetry correlation; no AI agent is required for this experiment.
 
 ## Boundaries
 
-Single process, serial Chromium scenarios, manual instrumentation, synthetic in-memory inventory operation, local files and synchronous evidence flushes. There is no real database, payment, load benchmark, distributed deployment, long-term telemetry storage, flakiness analysis, production SLO or security hardening. The browser supplies a valid remote parent context; a browser OTel root span is not exported. Future collector/OTLP integration must be separately implemented and verified.
+Single synthetic service process, serial Chromium scenarios, manual instrumentation, in-memory inventory operation and synchronous evidence flushes. The LGTM stack is local and ephemeral; there is no real database, payment system, load benchmark, distributed deployment, long-term telemetry retention, flakiness analysis, production SLO, authentication model or production security hardening. Grafana anonymous access is enabled only for the loopback-bound demo stack. The browser supplies a valid remote parent context; a browser OTel root span is not exported.
 
 Author: Javier Capa. License: ISC.
