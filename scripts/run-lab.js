@@ -1,0 +1,15 @@
+import { spawnSync } from 'node:child_process';
+import { randomUUID } from 'node:crypto';
+import { mkdirSync, writeFileSync } from 'node:fs';
+import { resolve } from 'node:path';
+const id = randomUUID();
+const directory = resolve('artifacts', id);
+mkdirSync(directory, { recursive: true });
+const env = { ...process.env, LAB_RUN_ID: id, EVIDENCE_DIR: directory };
+if (process.argv.includes('--raw-failure')) env.LAB_RAW_FAILURE = '1';
+const run = args => spawnSync(process.execPath, args, { env, stdio: 'inherit' });
+const tests = run(['node_modules/@playwright/test/cli.js', 'test']);
+const gate = run(['scripts/gate.js', directory]);
+writeFileSync('artifacts/latest.json', JSON.stringify({ run_id: id, evidence_directory: directory, tests_exit_code: tests.status, gate_exit_code: gate.status }, null, 2));
+console.log(`Evidence: ${directory}`);
+process.exitCode = tests.status === 0 && gate.status === 0 ? 0 : 1;

@@ -1,0 +1,7 @@
+<!doctype html>
+<html lang="en"><head><meta charset="utf-8"><meta name="viewport" content="width=device-width"><title>Quality Observability Lab</title>
+<style>body{font:18px system-ui;background:#101b2b;color:#edf4ff;max-width:850px;margin:8vh auto;padding:24px}small{color:#7edbcc}h1{font-size:48px}button,select{font:inherit;padding:12px;border-radius:8px;margin:12px 12px 12px 0}pre{white-space:pre-wrap;background:#203148;padding:24px;border-radius:12px}footer{color:#afbed2;margin-top:48px}</style></head>
+<body><small>JAVIER CAPA / R&D · LEARNING LAB</small><h1>From a failed test<br>to explainable evidence.</h1><p>A synthetic checkout connects browser execution with backend traces, logs and metrics.</p>
+<label for="scenario">Experiment</label><select id="scenario"><option value="success">Healthy checkout</option><option value="error">Injected inventory failure</option></select><button id="checkout">Run checkout</button>
+<pre id="result" aria-live="polite">Ready. All data is synthetic.</pre><footer>Local demonstration only · No payments · No customer data</footer>
+<script>document.querySelector('#checkout').onclick=async()=>{const response=await fetch('/api/checkout?scenario='+document.querySelector('#scenario').value,{method:'POST',headers:{'x-test-run-id':window.labRunId||'manual-'+crypto.randomUUID(),...(window.labTraceparent?{traceparent:window.labTraceparent}:{})}});document.querySelector('#result').textContent=JSON.stringify(await response.json(),null,2);};</script></body></html>
