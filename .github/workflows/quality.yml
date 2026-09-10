@@ -1,12 +1,16 @@
 name: Quality Observability Gate
+
 on:
   push:
   pull_request:
   workflow_dispatch:
+
 permissions:
   contents: read
+
 jobs:
-  quality:
+  deterministic-evidence:
+    name: deterministic-evidence
     runs-on: ubuntu-latest
     timeout-minutes: 10
     steps:
@@ -30,3 +34,37 @@ jobs:
             test-results/
           retention-days: 14
           if-no-files-found: error
+
+  otel-stack-contract:
+    name: otel-stack-contract
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '24'
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Start local LGTM stack
+        run: docker compose up -d
+      - name: Run OTLP observability experiment
+        run: npm run demo:stack
+      - name: Capture stack logs
+        if: always()
+        run: docker compose logs --no-color > stack-logs.txt || true
+      - uses: actions/upload-artifact@v4
+        if: always()
+        with:
+          name: quality-observability-stack-evidence
+          path: |
+            artifacts/
+            playwright-report/
+            test-results/
+            stack-logs.txt
+          retention-days: 14
+          if-no-files-found: error
+      - name: Stop local LGTM stack
+        if: always()
+        run: docker compose down -v --remove-orphans
